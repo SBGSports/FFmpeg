@@ -1,6 +1,7 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+- VDA dropped (use VideoToolbox instead)
 
 version 3.3.3:
 - avcodec/dirac_dwt: Fix multiple integer overflows in COMPOSE_DD97iH0()

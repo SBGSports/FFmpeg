@@ -62,7 +62,6 @@ enum HWAccelID {
     HWACCEL_AUTO,
     HWACCEL_VDPAU,
     HWACCEL_DXVA2,
-    HWACCEL_VDA,
     HWACCEL_VIDEOTOOLBOX,
     HWACCEL_QSV,
     HWACCEL_VAAPI,
@@ -652,7 +651,6 @@ int ffmpeg_parse_options(int argc, char **argv);
 
 int vdpau_init(AVCodecContext *s);
 int dxva2_init(AVCodecContext *s);
-int vda_init(AVCodecContext *s);
 int videotoolbox_init(AVCodecContext *s);
 int qsv_init(AVCodecContext *s);
 int vaapi_decode_init(AVCodecContext *avctx);
