@@ -2330,6 +2330,10 @@ static int sdp_read_header(AVFormatContext *s)
             append_source_addrs(url, sizeof(url), "block",
                                 rtsp_st->nb_exclude_source_addrs,
                                 rtsp_st->exclude_source_addrs);
+            /* assuming sender does not need RTCP RR packets by opening RTCP
+               socket (as well as RTP socket) as readonly, so that multiple SDP
+               connections can avoid clashing over multicast sockets using
+               0.0.0.0:port. See rtp_open() and udp_open() */
             err = ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ,
                            &s->interrupt_callback, &opts, s->protocol_whitelist, s->protocol_blacklist, NULL);
 
