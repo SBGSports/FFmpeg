@@ -589,6 +589,9 @@ OBJS-$(CONFIG_UNIX_PROTOCOL)             += unix.o
 # libavdevice dependencies
 OBJS-$(CONFIG_IEC61883_INDEV)            += dv.o
 
+# external libraries
+OBJS-$(CONFIG_LIBSRT_PROTOCOL)           += libsrt.o
+
 # Windows resource file
 SLIBOBJS-$(HAVE_GNU_WINDRES)             += avformatres.o
 
