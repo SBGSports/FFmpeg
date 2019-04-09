@@ -832,6 +832,10 @@ static int udp_open(URLContext *h, const char *uri, int flags)
         s->reuse_socket = 1;
         if (setsockopt (udp_fd, SOL_SOCKET, SO_REUSEADDR, &(s->reuse_socket), sizeof(s->reuse_socket)) != 0)
             goto fail;
+#ifdef __APPLE__  // MacOS/X requires an additional call
+        if (setsockopt (udp_fd, SOL_SOCKET, SO_REUSEPORT, &(s->reuse_socket), sizeof(s->reuse_socket)) != 0)
+            goto fail;
+#endif
     }
 
     if (s->is_broadcast) {
