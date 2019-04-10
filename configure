@@ -1867,7 +1867,6 @@ EXTERNAL_LIBRARY_GPL_LIST="
     libdvdread
     librubberband
     libvidstab
-    libx264
     libx265
     libxavs
     libxavs2
@@ -1971,6 +1970,7 @@ EXTERNAL_LIBRARY_LIST="
     libvpx
     libvvenc
     libwebp
+    libx264
     libxevd
     libxeve
     libxml2
