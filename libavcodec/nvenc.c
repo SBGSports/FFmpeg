@@ -1262,6 +1262,11 @@ av_cold int ff_nvenc_encode_close(AVCodecContext *avctx)
     CUcontext dummy;
     int i;
 
+    if (!dl_fn->cuda_dl) {
+        av_log(avctx, AV_LOG_VERBOSE, "CUDA functions not loaded so assuming nothing to close\n");
+        return 0;
+    }
+
     cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
     if (cu_res != CUDA_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
