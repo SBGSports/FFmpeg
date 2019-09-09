@@ -625,6 +625,8 @@ int64_t ffurl_size(URLContext *h)
 
 int ffurl_get_file_handle(URLContext *h)
 {
+    if (!h)
+        return -1;
     if (!h->prot->url_get_file_handle)
         return -1;
     return h->prot->url_get_file_handle(h);
