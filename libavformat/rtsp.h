@@ -408,6 +408,11 @@ typedef struct RTSPState {
 
     char default_lang[4];
     int buffer_size;
+
+    /**
+     * local IP address of a network interface used for joining multicast groups.
+     */
+    char *localaddr;
 } RTSPState;
 
 #define RTSP_FLAG_FILTER_SRC  0x1    /**< Filter incoming UDP packets -

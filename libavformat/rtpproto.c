@@ -59,6 +59,7 @@ typedef struct RTPContext {
     char *sources;
     char *block;
     char *fec_options_str;
+    char *localaddr;
 } RTPContext;
 
 #define OFFSET(x) offsetof(RTPContext, x)
@@ -77,6 +78,7 @@ static const AVOption options[] = {
     { "sources",            "Source list",                                                      OFFSET(sources),         AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "block",              "Block list",                                                       OFFSET(block),           AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "fec",                "FEC",                                                              OFFSET(fec_options_str), AV_OPT_TYPE_STRING, { .str = NULL },               .flags = E },
+    { "localaddr",          "Local address",                                                    OFFSET(localaddr),       AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D },
     { NULL }
 };
 
@@ -245,6 +247,8 @@ static void build_udp_url(RTPContext *s,
         url_add_option(buf, buf_size, "connect=1");
     if (s->dscp >= 0)
         url_add_option(buf, buf_size, "dscp=%d", s->dscp);
+    if (s->localaddr && s->localaddr)
+        url_add_option(buf, buf_size, "localaddr=%s", s->localaddr);
     url_add_option(buf, buf_size, "fifo_size=0");
     if (include_sources && include_sources[0])
         url_add_option(buf, buf_size, "sources=%s", include_sources);
