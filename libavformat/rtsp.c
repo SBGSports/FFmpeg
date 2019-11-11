@@ -76,7 +76,8 @@
 
 #define COMMON_OPTS() \
     { "reorder_queue_size", "set number of packets to buffer for handling of reordered packets", OFFSET(reordering_queue_size), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC }, \
-    { "buffer_size",        "Underlying protocol send/receive buffer size",                  OFFSET(buffer_size),           AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC|ENC } \
+    { "buffer_size",        "Underlying protocol send/receive buffer size",                  OFFSET(buffer_size),           AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC|ENC }, \
+    { "localaddr",          "Local address",                                                     OFFSET(localaddr),             AV_OPT_TYPE_STRING, { .str = NULL }, DEC } \
 
 
 const AVOption ff_rtsp_options[] = {
@@ -123,6 +124,8 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     snprintf(buf, sizeof(buf), "%d", rt->buffer_size);
     av_dict_set(&opts, "buffer_size", buf, 0);
+    if ( rt->localaddr )
+        av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
 
     return opts;
 }
@@ -1599,6 +1602,7 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
         }
         case RTSP_LOWER_TRANSPORT_UDP_MULTICAST: {
             char url[1024], namebuf[50], optbuf[20] = "";
+            AVDictionary *opts = NULL;
             struct sockaddr_storage addr;
             int port, ttl;
 
@@ -1613,12 +1617,14 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
             }
             if (ttl > 0)
                 snprintf(optbuf, sizeof(optbuf), "?ttl=%d", ttl);
+            if (rt->localaddr)
+                av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
             getnameinfo((struct sockaddr*) &addr, sizeof(addr),
                         namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
             ff_url_join(url, sizeof(url), "rtp", NULL, namebuf,
                         port, "%s", optbuf);
             if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ_WRITE,
-                           &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL) < 0) {
+                           &s->interrupt_callback, opts, s->protocol_whitelist, s->protocol_blacklist, NULL) < 0) {
                 err = AVERROR_INVALIDDATA;
                 goto fail;
             }
