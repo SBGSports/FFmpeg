@@ -77,7 +77,7 @@
 #define COMMON_OPTS() \
     { "reorder_queue_size", "set number of packets to buffer for handling of reordered packets", OFFSET(reordering_queue_size), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC }, \
     { "buffer_size",        "Underlying protocol send/receive buffer size",                  OFFSET(buffer_size),           AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC|ENC }, \
-    { "localaddr",          "Local address",                                                     OFFSET(localaddr),             AV_OPT_TYPE_STRING, { .str = NULL }, DEC } \
+    { "localaddr",          "Local address",                                                     OFFSET(localaddr),             AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, DEC } \
 
 
 const AVOption ff_rtsp_options[] = {
@@ -1624,7 +1624,9 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
             ff_url_join(url, sizeof(url), "rtp", NULL, namebuf,
                         port, "%s", optbuf);
             if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ_WRITE,
-                           &s->interrupt_callback, opts, s->protocol_whitelist, s->protocol_blacklist, NULL) < 0) {
+                                     &s->interrupt_callback, &opts,
+                                     s->protocol_whitelist,
+                                     s->protocol_blacklist, NULL) < 0) {
                 err = AVERROR_INVALIDDATA;
                 goto fail;
             }
