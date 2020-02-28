@@ -124,8 +124,6 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     snprintf(buf, sizeof(buf), "%d", rt->buffer_size);
     av_dict_set(&opts, "buffer_size", buf, 0);
-    if ( rt->localaddr )
-        av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
 
     return opts;
 }
@@ -2315,6 +2313,8 @@ static int sdp_read_header(AVFormatContext *s)
 
         if (!(rt->rtsp_flags & RTSP_FLAG_CUSTOM_IO)) {
             AVDictionary *opts = map_to_opts(rt);
+            if (rt->localaddr)
+                av_dict_set(&opts, "localaddr", rt->localaddr, 0);
 
             err = getnameinfo((struct sockaddr*) &rtsp_st->sdp_ip,
                               sizeof(rtsp_st->sdp_ip),
