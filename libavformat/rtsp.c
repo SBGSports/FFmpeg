@@ -1621,7 +1621,7 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
                         namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
             ff_url_join(url, sizeof(url), "rtp", NULL, namebuf,
                         port, "%s", optbuf);
-            if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ_WRITE,
+            if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ,
                                      &s->interrupt_callback, &opts,
                                      s->protocol_whitelist,
                                      s->protocol_blacklist, NULL) < 0) {
