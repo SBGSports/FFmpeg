@@ -383,6 +383,9 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
             rtp_parse_addr_list(h, s->block, &s->ssm_exclude_addrs, &s->nb_ssm_exclude_addrs);
             block = s->block;
         }
+        if (av_find_info_tag(buf, sizeof(buf), "localaddr", p)) {
+            av_opt_set(s, "localaddr", buf, 0);
+        }
     }
 
     if (s->fec_options_str) {

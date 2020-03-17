@@ -2395,7 +2395,7 @@ static int rtp_probe(AVProbeData *p)
 static int rtp_read_header(AVFormatContext *s)
 {
     uint8_t recvbuf[RTP_MAX_PACKET_LENGTH];
-    char host[500], sdp[500];
+    char buf[1024], host[500], sdp[500];
     int ret, port;
     URLContext* in = NULL;
     int payload_type;
@@ -2404,12 +2404,25 @@ static int rtp_read_header(AVFormatContext *s)
     AVIOContext pb;
     socklen_t addrlen = sizeof(addr);
     RTSPState *rt = s->priv_data;
+    AVDictionary *opts = NULL;
+    const char* p = NULL;
 
     if (!ff_network_init())
         return AVERROR(EIO);
 
+    p = strchr(s->filename, '?');
+    if (p) {
+        if (av_find_info_tag(buf, sizeof(buf), "localaddr", p)) {
+            av_opt_set(rt, "localaddr", buf, 0);
+        }
+    }
+    if (rt->localaddr)
+        av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
+
     ret = ffurl_open_whitelist(&in, s->filename, AVIO_FLAG_READ,
-                     &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL);
+                               &s->interrupt_callback, &opts,
+                               s->protocol_whitelist, s->protocol_blacklist,
+                               NULL);
     if (ret)
         goto fail;
 
