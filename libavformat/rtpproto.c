@@ -247,7 +247,7 @@ static void build_udp_url(RTPContext *s,
         url_add_option(buf, buf_size, "connect=1");
     if (s->dscp >= 0)
         url_add_option(buf, buf_size, "dscp=%d", s->dscp);
-    if (s->localaddr && s->localaddr)
+    if (s->localaddr && s->localaddr[0])
         url_add_option(buf, buf_size, "localaddr=%s", s->localaddr);
     url_add_option(buf, buf_size, "fifo_size=0");
     if (include_sources && include_sources[0])
@@ -382,6 +382,9 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         } else {
             rtp_parse_addr_list(h, s->block, &s->ssm_exclude_addrs, &s->nb_ssm_exclude_addrs);
             block = s->block;
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "localaddr", p)) {
+            av_opt_set(s, "localaddr", buf, 0);
         }
     }
 

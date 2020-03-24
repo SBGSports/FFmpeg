@@ -77,7 +77,7 @@
 #define COMMON_OPTS() \
     { "reorder_queue_size", "set number of packets to buffer for handling of reordered packets", OFFSET(reordering_queue_size), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC }, \
     { "buffer_size",        "Underlying protocol send/receive buffer size",                  OFFSET(buffer_size),           AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, DEC|ENC }, \
-    { "localaddr",          "Local address",                                                     OFFSET(localaddr),             AV_OPT_TYPE_STRING, { .str = NULL }, DEC } \
+    { "localaddr",          "Local address",                                                     OFFSET(localaddr),             AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, DEC } \
 
 
 const AVOption ff_rtsp_options[] = {
@@ -124,8 +124,6 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     snprintf(buf, sizeof(buf), "%d", rt->buffer_size);
     av_dict_set(&opts, "buffer_size", buf, 0);
-    if ( rt->localaddr )
-        av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
 
     return opts;
 }
@@ -1623,8 +1621,10 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
                         namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
             ff_url_join(url, sizeof(url), "rtp", NULL, namebuf,
                         port, "%s", optbuf);
-            if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ_WRITE,
-                           &s->interrupt_callback, opts, s->protocol_whitelist, s->protocol_blacklist, NULL) < 0) {
+            if (ffurl_open_whitelist(&rtsp_st->rtp_handle, url, AVIO_FLAG_READ,
+                                     &s->interrupt_callback, &opts,
+                                     s->protocol_whitelist,
+                                     s->protocol_blacklist, NULL) < 0) {
                 err = AVERROR_INVALIDDATA;
                 goto fail;
             }
@@ -2313,6 +2313,8 @@ static int sdp_read_header(AVFormatContext *s)
 
         if (!(rt->rtsp_flags & RTSP_FLAG_CUSTOM_IO)) {
             AVDictionary *opts = map_to_opts(rt);
+            if (rt->localaddr)
+                av_dict_set(&opts, "localaddr", rt->localaddr, 0);
 
             err = getnameinfo((struct sockaddr*) &rtsp_st->sdp_ip,
                               sizeof(rtsp_st->sdp_ip),
@@ -2393,7 +2395,7 @@ static int rtp_probe(AVProbeData *p)
 static int rtp_read_header(AVFormatContext *s)
 {
     uint8_t recvbuf[RTP_MAX_PACKET_LENGTH];
-    char host[500], sdp[500];
+    char buf[1024], host[500], sdp[500];
     int ret, port;
     URLContext* in = NULL;
     int payload_type;
@@ -2402,12 +2404,25 @@ static int rtp_read_header(AVFormatContext *s)
     AVIOContext pb;
     socklen_t addrlen = sizeof(addr);
     RTSPState *rt = s->priv_data;
+    AVDictionary *opts = NULL;
+    const char* p = NULL;
 
     if (!ff_network_init())
         return AVERROR(EIO);
 
+    p = strchr(s->filename, '?');
+    if (p) {
+        if (av_find_info_tag(buf, sizeof(buf), "localaddr", p)) {
+            av_opt_set(rt, "localaddr", buf, 0);
+        }
+    }
+    if (rt->localaddr)
+        av_dict_set( &opts, "localaddr", rt->localaddr, 0 );
+
     ret = ffurl_open_whitelist(&in, s->filename, AVIO_FLAG_READ,
-                     &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL);
+                               &s->interrupt_callback, &opts,
+                               s->protocol_whitelist, s->protocol_blacklist,
+                               NULL);
     if (ret)
         goto fail;
 
