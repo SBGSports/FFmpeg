@@ -1964,8 +1964,10 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                     ts_diff = av_rescale_rnd(pls->pkt.dts, AV_TIME_BASE,
                                             tb.den, AV_ROUND_DOWN) -
                             pls->seek_timestamp;
-                    if (ts_diff >= 0 && (pls->seek_flags  & AVSEEK_FLAG_ANY ||
-                                        pls->pkt.flags & AV_PKT_FLAG_KEY)) {
+                    /* If AVSEEK_FLAG_ANY, keep reading until ts_diff is greater than 0
+                     * otherwise return the first keyframe encountered */
+                    if ((ts_diff >= 0 && (pls->seek_flags & AVSEEK_FLAG_ANY)) ||
+                        (!(pls->seek_flags & AVSEEK_FLAG_ANY) && (pls->pkt.flags & AV_PKT_FLAG_KEY)))  {
                         pls->seek_timestamp = AV_NOPTS_VALUE;
                         break;
                     }
@@ -2103,7 +2105,7 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
         pls->pb.eof_reached = 0;
         /* Clear any buffered data */
         pls->pb.buf_end = pls->pb.buf_ptr = pls->pb.buffer;
-        /* Reset the pos, to let the mpegts demuxer know we've seeked. */
+        /* Reset the pos, to let the mpegts/mov demuxer know we've seeked. */
         pls->pb.pos = 0;
         /* Flush the packet queue of the subdemuxer. */
         ff_read_frame_flush(pls->ctx);
