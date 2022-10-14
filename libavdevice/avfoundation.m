@@ -1007,6 +1007,90 @@ static int avf_read_packet(AVFormatContext *s, AVPacket *pkt)
     return 0;
 }
 
+static int avf_add_device_info(AVDeviceInfoList *list, AVFormatContext *s,int index, const char *description, const char *model, int do_log)
+{
+    if (do_log) av_log(s->priv_data, AV_LOG_INFO, "[%d] %s\n", index, description);
+    if (!list) return 0;
+    
+    AVDeviceInfo *info = av_mallocz(sizeof(AVDeviceInfo));
+    if (!info) return AVERROR(ENOMEM);
+    
+    info->device_name = av_asprintf("[%d] %s: %s", index, description, model);
+    info->device_description = strdup(description);
+    if (!info->device_name || !info->device_description) {
+        av_free(info);
+        return AVERROR(ENOMEM);
+    }
+    
+    av_dynarray_add(&list->devices, &list->nb_devices, info);
+    return list ? list->nb_devices : AVERROR(ENOMEM);
+}
+
+static int avf_get_device_list2(struct AVFormatContext *s, struct AVDeviceInfoList *list, int do_log)
+{
+    int result = 0, index;
+    const char *localizedName, *modelID;
+    
+    if (do_log) av_log(s->priv_data, AV_LOG_INFO, "AVFoundation video devices:\n");
+    NSArray *video_devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
+    for (AVCaptureDevice *device in video_devices) {
+        @autoreleasepool {
+            index = [video_devices indexOfObject:device];
+            localizedName = [[device localizedName] UTF8String];
+            modelID = [[device modelID] UTF8String];
+            
+            result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
+            if (result < 0) break;
+        }
+    }
+    [video_devices release];
+    
+    
+#if !TARGET_OS_IPHONE && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+    uint32_t num_screens = 0;
+    CGGetActiveDisplayList(0, NULL, &num_screens);
+    
+    if (num_screens > 0) {
+        CGDirectDisplayID screens[num_screens];
+        CGGetActiveDisplayList(num_screens, screens, &num_screens);
+        int i;
+        for (i = 0; i < num_screens; i++) {
+            char buf[30];
+            snprintf(buf, 30, "Capture screen %d", i);
+            
+            // No screen name available (as model). Implementation is arcane
+            // and uses deprecated API. See stackoverflow.com/q/24348142/220060
+            result = avf_add_device_info(list, s, index + i + 1, buf, "-", do_log);
+            if (result < 0) break;
+        }
+    }
+#endif
+    
+    if (do_log) av_log(s->priv_data, AV_LOG_INFO, "AVFoundation audio devices:\n");
+    NSArray *audio_devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio];
+    for (AVCaptureDevice *device in audio_devices) {
+        @autoreleasepool {
+            index = [audio_devices indexOfObject:device];
+            localizedName = [[device localizedName] UTF8String];
+            modelID = [[device modelID] UTF8String];
+            
+            result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
+            if (result < 0) break;
+        }
+    }
+    [audio_devices release];
+    
+    // Make the first device default if it exists.
+    if (list) list->default_device = list->nb_devices > 0 ? 0 : -1;
+    
+    return result;
+}
+
+static int avf_get_device_list(struct AVFormatContext *s, struct AVDeviceInfoList *list)
+{
+    return avf_get_device_list2(s, list, FALSE);
+}
+
 static int avf_close(AVFormatContext *s)
 {
     AVFContext* ctx = (AVFContext*)s->priv_data;
@@ -1044,6 +1128,7 @@ AVInputFormat ff_avfoundation_demuxer = {
     .read_header    = avf_read_header,
     .read_packet    = avf_read_packet,
     .read_close     = avf_close,
+    .get_device_list = avf_get_device_list,
     .flags          = AVFMT_NOFILE,
     .priv_class     = &avf_class,
 };
