@@ -1030,60 +1030,37 @@ static int avf_get_device_list2(struct AVFormatContext *s, struct AVDeviceInfoLi
 {
     int result = 0, index;
     const char *localizedName, *modelID;
-    
-    if (do_log) av_log(s->priv_data, AV_LOG_INFO, "AVFoundation video devices:\n");
-    NSArray *video_devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
-    for (AVCaptureDevice *device in video_devices) {
-        @autoreleasepool {
-            index = [video_devices indexOfObject:device];
+    @try
+    {
+        AVCaptureDeviceDiscoverySession* videoSession = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes: @[AVCaptureDeviceTypeExternalUnknown, AVCaptureDeviceTypeBuiltInWideAngleCamera]
+                                                                                                               mediaType: AVMediaTypeVideo
+                                                                                                                position: AVCaptureDevicePositionBack];
+        AVCaptureDeviceDiscoverySession* audioSession = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes: @[AVCaptureDeviceTypeExternalUnknown, AVCaptureDeviceTypeBuiltInMicrophone]
+                                                                                                               mediaType: AVMediaTypeAudio
+                                                                                                                position: AVCaptureDevicePositionBack];
+        for (AVCaptureDevice* device in videoSession.devices)
+        {
+            index = [videoSession.devices indexOfObject:device];
             localizedName = [[device localizedName] UTF8String];
             modelID = [[device modelID] UTF8String];
-            
+            result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
+            if (result < 0) break;
+        }
+        for (AVCaptureDevice* device in audioSession.devices)
+        {
+            index = [videoSession.devices indexOfObject:device];
+            localizedName = [[device localizedName] UTF8String];
+            modelID = [[device modelID] UTF8String];
             result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
             if (result < 0) break;
         }
     }
-    [video_devices release];
-    
-    
-#if !TARGET_OS_IPHONE && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
-    uint32_t num_screens = 0;
-    CGGetActiveDisplayList(0, NULL, &num_screens);
-    
-    if (num_screens > 0) {
-        CGDirectDisplayID screens[num_screens];
-        CGGetActiveDisplayList(num_screens, screens, &num_screens);
-        int i;
-        for (i = 0; i < num_screens; i++) {
-            char buf[30];
-            snprintf(buf, 30, "Capture screen %d", i);
-            
-            // No screen name available (as model). Implementation is arcane
-            // and uses deprecated API. See stackoverflow.com/q/24348142/220060
-            result = avf_add_device_info(list, s, index + i + 1, buf, "-", do_log);
-            if (result < 0) break;
-        }
+    @catch (NSException *exception)
+    {
+        av_log(s, AV_LOG_ERROR, "Exception: avf_get_device_list2 %@ %@", [exception name], [exception description]);
     }
-#endif
-    
-    if (do_log) av_log(s->priv_data, AV_LOG_INFO, "AVFoundation audio devices:\n");
-    NSArray *audio_devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeAudio];
-    for (AVCaptureDevice *device in audio_devices) {
-        @autoreleasepool {
-            index = [audio_devices indexOfObject:device];
-            localizedName = [[device localizedName] UTF8String];
-            modelID = [[device modelID] UTF8String];
-            
-            result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
-            if (result < 0) break;
-        }
-    }
-    [audio_devices release];
-    
-    // Make the first device default if it exists.
-    if (list) list->default_device = list->nb_devices > 0 ? 0 : -1;
-    
-    return result;
+
+  return result;
 }
 
 static int avf_get_device_list(struct AVFormatContext *s, struct AVDeviceInfoList *list)
