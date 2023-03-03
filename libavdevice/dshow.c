@@ -1279,116 +1279,6 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ctx->eof ? AVERROR(EIO) : pkt->size;
 }
 
-static int dshow_get_device_list(AVFormatContext *avctx, AVDeviceInfoList *device_list)
-{
-    IEnumMoniker *classenum = NULL;
-    ICreateDevEnum *devenum = NULL;
-    IMoniker *m = NULL;
-    int r = 0;
-    const GUID *device_guid[2] = { &CLSID_VideoInputDeviceCategory,
-                                   &CLSID_AudioInputDeviceCategory };
-
-
-    device_list->nb_devices = 0;
-    device_list->devices = NULL;
-    r = CoInitialize(0);
-    if(r != S_OK && r != S_FALSE){ // S_FALSE means already initialized
-        return AVERROR(EIO);
-    }
-
-    r = CoCreateInstance(&CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
-                         &IID_ICreateDevEnum, (void **) &devenum);
-    if (r != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not enumerate system devices.\n");
-        r = AVERROR(EIO);
-        goto fail2;
-    }
-
-    for(int sourcetype = 0; sourcetype<2; sourcetype++){
-        r = ICreateDevEnum_CreateClassEnumerator(devenum, device_guid[sourcetype],
-                                             (IEnumMoniker **) &classenum, 0);
-        if (r != S_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Could not enumerate dshow devices (or none found).\n");
-            r = AVERROR(EIO);
-            goto fail2;
-        }
-
-        while (IEnumMoniker_Next(classenum, 1, &m, NULL) == S_OK) {
-            IPropertyBag *bag = NULL;
-            char *friendly_name = NULL;
-            char *unique_name = NULL;
-            VARIANT var;
-            VariantInit(&var);
-            IBindCtx *bind_ctx = NULL;
-            LPOLESTR olestr = NULL;
-            LPMALLOC co_malloc = NULL;
-            int i;
-
-            r = CoGetMalloc(1, &co_malloc);
-            if (r != S_OK)
-                goto fail1;
-            r = CreateBindCtx(0, &bind_ctx);
-            if (r != S_OK)
-                goto fail1;
-            /* GetDisplayname works for both video and audio, DevicePath doesn't */
-            r = IMoniker_GetDisplayName(m, bind_ctx, NULL, &olestr);
-            if (r != S_OK)
-                goto fail1;
-            unique_name = dup_wchar_to_utf8(olestr);
-            /* replace ':' with '_' since we use : to delineate between sources */
-            for (i = 0; i < strlen(unique_name); i++) {
-                if (unique_name[i] == ':')
-                    unique_name[i] = '_';
-            }
-
-            r = IMoniker_BindToStorage(m, 0, 0, &IID_IPropertyBag, (void *) &bag);
-            if (r != S_OK)
-                goto fail1;
-
-            var.vt = VT_BSTR;
-            r = IPropertyBag_Read(bag, L"FriendlyName", &var, NULL);
-            if (r != S_OK)
-                goto fail1;
-            friendly_name = dup_wchar_to_utf8(var.bstrVal);
-            char *friendly_name2 = av_malloc(strlen(friendly_name)+7);
-            strcpy(friendly_name2,sourcetype==0?"video=":"audio=");
-            strcat(friendly_name2,friendly_name);
-            av_free(friendly_name);
-
-            device_list->nb_devices +=1;
-            device_list->devices = av_realloc( device_list->devices, device_list->nb_devices * sizeof(AVDeviceInfo*));
-            
-            AVDeviceInfo* newDevice = av_malloc(sizeof(AVDeviceInfo));
-            newDevice->device_description = friendly_name2;
-            newDevice->device_name = unique_name;
-
-            device_list->devices[device_list->nb_devices - 1] = newDevice;
-    fail1:
-            VariantClear(&var);
-            if (olestr && co_malloc)
-                IMalloc_Free(co_malloc, olestr);
-            if (bind_ctx)
-                IBindCtx_Release(bind_ctx);
-            if (bag)
-                IPropertyBag_Release(bag);
-            IMoniker_Release(m);
-        }
-    }
-    
-fail2:
-    if (devenum)
-        ICreateDevEnum_Release(devenum);
-    if (classenum)
-        IEnumMoniker_Release(classenum);
-
-    CoUninitialize();
-    if (r < 0)
-    {
-        return r;
-    }
-    return device_list->nb_devices;
-}
-
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
@@ -1435,7 +1325,6 @@ AVInputFormat ff_dshow_demuxer = {
     .read_header    = dshow_read_header,
     .read_packet    = dshow_read_packet,
     .read_close     = dshow_read_close,
-    .get_device_list = dshow_get_device_list,
     .flags          = AVFMT_NOFILE,
     .priv_class     = &dshow_class,
 };
