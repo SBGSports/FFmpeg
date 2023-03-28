@@ -1048,7 +1048,7 @@ static int avf_get_device_list2(struct AVFormatContext *s, struct AVDeviceInfoLi
         }
         for (AVCaptureDevice* device in audioSession.devices)
         {
-            index = [videoSession.devices indexOfObject:device];
+            index = [audioSession.devices indexOfObject:device];
             localizedName = [[device localizedName] UTF8String];
             modelID = [[device modelID] UTF8String];
             result = avf_add_device_info(list, s, index, localizedName, modelID, do_log);
