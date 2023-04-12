@@ -72,6 +72,8 @@ typedef struct CuvidContext
     int internal_error;
     int decoder_flushing;
 
+    int *key_frame;
+
     cudaVideoCodec codec_type;
     cudaVideoChromaFormat chroma_format;
 
@@ -327,6 +329,8 @@ static int CUDAAPI cuvid_handle_picture_decode(void *opaque, CUVIDPICPARAMS* pic
 
     av_log(avctx, AV_LOG_TRACE, "pfnDecodePicture\n");
 
+    ctx->key_frame[picparams->CurrPicIdx] = picparams->intra_pic_flag;
+
     ctx->internal_error = CHECK_CU(ctx->cvdl->cuvidDecodePicture(ctx->cudecoder, picparams));
     if (ctx->internal_error < 0)
         return 0;
@@ -556,6 +560,7 @@ static int cuvid_output_frame(AVCodecContext *avctx, AVFrame *frame)
             goto error;
         }
 
+        frame->key_frame = ctx->key_frame[parsed_frame.dispinfo.picture_index];
         frame->width = avctx->width;
         frame->height = avctx->height;
         if (avctx->pkt_timebase.num && avctx->pkt_timebase.den)
@@ -658,6 +663,8 @@ static av_cold int cuvid_decode_end(AVCodecContext *avctx)
 
     av_buffer_unref(&ctx->hwframe);
     av_buffer_unref(&ctx->hwdevice);
+
+    av_freep(&ctx->key_frame);
 
     cuvid_free_functions(&ctx->cvdl);
 
@@ -884,6 +891,12 @@ static av_cold int cuvid_decode_init(AVCodecContext *avctx)
         memcpy(ctx->cuparse_ext.raw_seqhdr_data,
                avctx->extradata,
                FFMIN(sizeof(ctx->cuparse_ext.raw_seqhdr_data), avctx->extradata_size));
+    }
+
+    ctx->key_frame = av_mallocz(ctx->nb_surfaces * sizeof(int));
+    if (!ctx->key_frame) {
+        ret = AVERROR(ENOMEM);
+        goto error;
     }
 
     ctx->cuparseinfo.ulMaxNumDecodeSurfaces = ctx->nb_surfaces;
