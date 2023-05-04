@@ -785,7 +785,14 @@ static int parse_playlist(HLSContext *c, const char *url,
             ptr = strchr(ptr, '@');
             if (ptr)
                 seg_offset = strtoll(ptr+1, NULL, 10);
+        } else if (av_strstart(line, "EXT-X-PROGRAM-DATE-TIME:",&ptr)) {
+            if(av_dict_get(c->ctx->metadata, "EXT-X-PROGRAM-DATE-TIME:", NULL, AV_DICT_MATCH_CASE)) {
+                av_log(c->ctx, AV_LOG_INFO, "Already set, skip ('%s')\n", line);
+                continue;
+            }
+            av_dict_set(c->ctx->metadata, "EXT-X-PROGRAM-DATE-TIME:", ptr, 0);
         } else if (av_strstart(line, "#", NULL)) {
+            av_log(c->ctx, AV_LOG_INFO, "Skip ('%s')\n", line);
             continue;
         } else if (line[0]) {
             if (is_variant) {
