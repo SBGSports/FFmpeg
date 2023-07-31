@@ -253,6 +253,7 @@ External library support:
   --enable-libsnappy       enable Snappy compression, needed for hap encoding [no]
   --enable-libsoxr         enable Include libsoxr resampling [no]
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
+  --enable-libsrt            Haivision SRT protocol
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
@@ -1571,6 +1572,7 @@ EXTERNAL_LIBRARY_LIST="
     libsnappy
     libsoxr
     libspeex
+    libsrt
     libssh
     libtesseract
     libtheora
@@ -3053,6 +3055,8 @@ libsmbclient_protocol_deps="libsmbclient gplv3"
 libssh_protocol_deps="libssh"
 mmsh_protocol_select="http_protocol"
 mmst_protocol_select="network"
+libsrt_protocol_deps="libsrt"
+libsrt_protocol_select="network"
 rtmp_protocol_deps="!librtmp_protocol"
 rtmp_protocol_select="tcp_protocol"
 rtmpe_protocol_select="ffrtmpcrypt_protocol"
@@ -5811,6 +5815,7 @@ enabled libopenjpeg       && { { check_lib openjpeg-2.1/openjpeg.h opj_version -
                                { check_lib openjpeg-1.5/openjpeg.h opj_version -lopenjpeg -DOPJ_STATIC && add_cppflags -DOPJ_STATIC; } ||
                                { check_lib openjpeg.h opj_version -lopenjpeg -DOPJ_STATIC && add_cppflags -DOPJ_STATIC; } ||
                                die "ERROR: libopenjpeg not found"; }
+enabled libsrt            && require_pkg_config "srt >= 1.2.0" srt/srt.h srt_socket
 enabled libopenmpt        && require_pkg_config "libopenmpt >= 0.2.6557" libopenmpt/libopenmpt.h openmpt_module_create
 enabled libopus           && require_pkg_config opus opus_multistream.h opus_multistream_decoder_create
 enabled libpulse          && require_pkg_config libpulse pulse/pulseaudio.h pa_context_new
