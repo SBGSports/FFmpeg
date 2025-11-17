@@ -32,6 +32,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/timecode.h"
 
 #include "bswapdsp.h"
 #include "bytestream.h"
@@ -2664,6 +2665,32 @@ static int set_side_data(HEVCContext *s)
         av_log(s->avctx, AV_LOG_DEBUG,
                "min_luminance=%f, max_luminance=%f\n",
                av_q2d(metadata->min_luminance), av_q2d(metadata->max_luminance));
+    }
+
+    if (s->timecode.present) {
+        uint32_t* tc_sd;
+        char tcbuf[AV_TIMECODE_STR_SIZE];
+        AVFrameSideData* tcside;
+        tcside = av_frame_new_side_data(out, AV_FRAME_DATA_S12M_TIMECODE, sizeof(uint32_t) * 4);
+
+        if (tcside) {
+            tc_sd = (uint32_t*)tcside->data;
+            tc_sd[0] = s->timecode.num_clock_ts;
+
+            for (int i = 0; i < tc_sd[0]; i++) {
+                int drop = s->timecode.cnt_dropped_flag[i];
+                int   hh = s->timecode.hours_value[i];
+                int   mm = s->timecode.minutes_value[i];
+                int   ss = s->timecode.seconds_value[i];
+                int   ff = s->timecode.n_frames[i];
+
+                tc_sd[i + 1] = av_timecode_get_smpte(s->avctx->framerate, drop, hh, mm, ss, ff);
+                av_timecode_make_smpte_tc_string2(tcbuf, s->avctx->framerate, tc_sd[i + 1], 0, 0);
+                av_dict_set(&out->metadata, "timecode", tcbuf, 0);
+            }
+        }
+
+        s->timecode.num_clock_ts = 0;
     }
 
     if (s->a53_caption) {

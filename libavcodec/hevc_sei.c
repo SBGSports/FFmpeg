@@ -49,6 +49,7 @@ enum HEVC_SEI_TYPE {
     SEI_TYPE_DECODED_PICTURE_HASH                 = 132,
     SEI_TYPE_SCALABLE_NESTING                     = 133,
     SEI_TYPE_REGION_REFRESH_INFO                  = 134,
+    SEI_TYPE_TIME_CODE                            = 136,
     SEI_TYPE_MASTERING_DISPLAY_INFO               = 137,
     SEI_TYPE_CONTENT_LIGHT_LEVEL_INFO             = 144,
 };
@@ -258,6 +259,54 @@ static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCContext *s, int siz
     return 0;
 }
 
+static int decode_nal_sei_timecode(HEVCSEITimeCode* s, GetBitContext* gb)
+{
+    s->num_clock_ts = get_bits(gb, 2);
+
+    for (int i = 0; i < s->num_clock_ts; i++) {
+        s->clock_timestamp_flag[i] = get_bits(gb, 1);
+
+        if (s->clock_timestamp_flag[i]) {
+            s->units_field_based_flag[i] = get_bits(gb, 1);
+            s->counting_type[i] = get_bits(gb, 5);
+            s->full_timestamp_flag[i] = get_bits(gb, 1);
+            s->discontinuity_flag[i] = get_bits(gb, 1);
+            s->cnt_dropped_flag[i] = get_bits(gb, 1);
+
+            s->n_frames[i] = get_bits(gb, 9);
+
+            if (s->full_timestamp_flag[i]) {
+                s->seconds_value[i] = av_clip(get_bits(gb, 6), 0, 59);
+                s->minutes_value[i] = av_clip(get_bits(gb, 6), 0, 59);
+                s->hours_value[i] = av_clip(get_bits(gb, 5), 0, 23);
+            }
+            else {
+                s->seconds_flag[i] = get_bits(gb, 1);
+                if (s->seconds_flag[i]) {
+                    s->seconds_value[i] = av_clip(get_bits(gb, 6), 0, 59);
+                    s->minutes_flag[i] = get_bits(gb, 1);
+                    if (s->minutes_flag[i]) {
+                        s->minutes_value[i] = av_clip(get_bits(gb, 6), 0, 59);
+                        s->hours_flag[i] = get_bits(gb, 1);
+                        if (s->hours_flag[i]) {
+                            s->hours_value[i] = av_clip(get_bits(gb, 5), 0, 23);
+                        }
+                    }
+                }
+            }
+
+            s->time_offset_length[i] = get_bits(gb, 5);
+            if (s->time_offset_length[i] > 0) {
+                s->time_offset_value[i] = get_bits_long(gb, s->time_offset_length[i]);
+            }
+        }
+    }
+
+    s->present = 1;
+    return 0;
+}
+
+
 static int active_parameter_sets(HEVCContext *s)
 {
     GetBitContext *gb = &s->HEVClc->gb;
@@ -313,6 +362,8 @@ static int decode_nal_sei_prefix(HEVCContext *s, int type, int size)
         return 0;
     case SEI_TYPE_USER_DATA_REGISTERED_ITU_T_T35:
         return decode_nal_sei_user_data_registered_itu_t_t35(s, size);
+    case SEI_TYPE_TIME_CODE:
+        return decode_nal_sei_timecode(&s->timecode, gb);
     default:
         av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", type);
         skip_bits_long(gb, 8 * size);

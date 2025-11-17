@@ -1592,7 +1592,15 @@ enum AVPacketSideDataType {
      * If its value becomes huge, some code using it
      * needs to be updated as it assumes it to be smaller than other limits.
      */
-    AV_PKT_DATA_NB
+    AV_PKT_DATA_NB,
+
+    /**
+     * Timecode which conforms to SMPTE ST 12-1:2014. The data is an array of 4 uint32_t
+     * where the first uint32_t describes how many (1-3) of the other timecodes are used.
+     * The timecode format is described in the documentation of av_timecode_get_smpte_from_framenum()
+     * function in libavutil/timecode.h.
+     */
+    AV_PKT_DATA_S12M_TIMECODE,
 };
 
 #define AV_PKT_DATA_QUALITY_FACTOR AV_PKT_DATA_QUALITY_STATS //DEPRECATED

@@ -382,8 +382,8 @@ static void image_copy(uint8_t *dst_data[4], const ptrdiff_t dst_linesizes[4],
     }
 }
 
-void av_image_copy(uint8_t *dst_data[4], int dst_linesizes[4],
-                   const uint8_t *src_data[4], const int src_linesizes[4],
+void av_image_copy(uint8_t * const dst_data[4], const int dst_linesizes[4],
+                   const uint8_t * const src_data[4], const int src_linesizes[4],
                    enum AVPixelFormat pix_fmt, int width, int height)
 {
     ptrdiff_t dst_linesizes1[4], src_linesizes1[4];

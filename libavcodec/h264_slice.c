@@ -1127,6 +1127,16 @@ static int h264_export_frame_props(H264Context *h)
     /* Signal interlacing information externally. */
     /* Prioritize picture timing SEI information over used
      * decoding process if it exists. */
+    if (h->sei.picture_timing.present) {
+        int ret = ff_h264_sei_process_picture_timing(&h->sei.picture_timing, sps,
+            h->avctx);
+        if (ret < 0) {
+            av_log(h->avctx, AV_LOG_ERROR, "Error processing a picture timing SEI\n");
+            if (h->avctx->err_recognition & AV_EF_EXPLODE)
+                return ret;
+            h->sei.picture_timing.present = 0;
+        }
+    }
 
     if (sps->pic_struct_present_flag && h->sei.picture_timing.present) {
         H264SEIPictureTiming *pt = &h->sei.picture_timing;
@@ -1266,6 +1276,32 @@ static int h264_export_frame_props(H264Context *h)
         av_freep(&a53->a53_caption);
         a53->a53_caption_size = 0;
         h->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+    }
+
+    if (h->sei.picture_timing.timecode_cnt > 0) {
+        uint32_t* tc_sd;
+        char tcbuf[AV_TIMECODE_STR_SIZE];
+        AVFrameSideData* tcside;
+        tcside = av_frame_new_side_data(cur->f, AV_FRAME_DATA_S12M_TIMECODE,
+            sizeof(uint32_t) * 4);
+
+        if (tcside) {
+            tc_sd = (uint32_t*)tcside->data;
+            tc_sd[0] = h->sei.picture_timing.timecode_cnt;
+
+            for (int i = 0; i < tc_sd[0]; i++) {
+                int drop = h->sei.picture_timing.timecode[i].dropframe;
+                int   hh = h->sei.picture_timing.timecode[i].hours;
+                int   mm = h->sei.picture_timing.timecode[i].minutes;
+                int   ss = h->sei.picture_timing.timecode[i].seconds;
+                int   ff = h->sei.picture_timing.timecode[i].frame;
+
+                tc_sd[i + 1] = av_timecode_get_smpte(h->avctx->framerate, drop, hh, mm, ss, ff);
+                av_timecode_make_smpte_tc_string2(tcbuf, h->avctx->framerate, tc_sd[i + 1], 0, 0);
+                av_dict_set(&cur->f->metadata, "timecode", tcbuf, 0);
+            }
+        }
+        h->sei.picture_timing.timecode_cnt = 0;
     }
 
     return 0;

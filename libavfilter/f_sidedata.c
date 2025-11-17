@@ -62,6 +62,7 @@ static const AVOption filt_name##_options[] = { \
     {   "AUDIO_SERVICE_TYPE",         "", 0,             AV_OPT_TYPE_CONST,  {.i64 = AV_FRAME_DATA_AUDIO_SERVICE_TYPE         }, 0, 0, FLAGS, "type" }, \
     {   "MASTERING_DISPLAY_METADATA", "", 0,             AV_OPT_TYPE_CONST,  {.i64 = AV_FRAME_DATA_MASTERING_DISPLAY_METADATA }, 0, 0, FLAGS, "type" }, \
     {   "GOP_TIMECODE",               "", 0,             AV_OPT_TYPE_CONST,  {.i64 = AV_FRAME_DATA_GOP_TIMECODE               }, 0, 0, FLAGS, "type" }, \
+    {   "S12M_TIMECOD",               "", 0,             AV_OPT_TYPE_CONST,  {.i64 = AV_FRAME_DATA_S12M_TIMECODE              }, 0, 0, FLAGS, "type" }, \
     { NULL } \
 }
 

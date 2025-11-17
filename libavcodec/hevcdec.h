@@ -464,6 +464,26 @@ typedef struct HEVCLocalContext {
     int boundary_flags;
 } HEVCLocalContext;
 
+typedef struct HEVCSEITimeCode {
+    int      present;
+    uint8_t  num_clock_ts;
+    uint8_t  clock_timestamp_flag[3];
+    uint8_t  units_field_based_flag[3];
+    uint8_t  counting_type[3];
+    uint8_t  full_timestamp_flag[3];
+    uint8_t  discontinuity_flag[3];
+    uint8_t  cnt_dropped_flag[3];
+    uint16_t n_frames[3];
+    uint8_t  seconds_value[3];
+    uint8_t  minutes_value[3];
+    uint8_t  hours_value[3];
+    uint8_t  seconds_flag[3];
+    uint8_t  minutes_flag[3];
+    uint8_t  hours_flag[3];
+    uint8_t  time_offset_length[3];
+    int32_t  time_offset_value[3];
+} HEVCSEITimeCode;
+
 typedef struct HEVCContext {
     const AVClass *c;  // needed by private avoptions
     AVCodecContext *avctx;
@@ -583,6 +603,9 @@ typedef struct HEVCContext {
     int sei_display_orientation_present;
     int sei_anticlockwise_rotation;
     int sei_hflip, sei_vflip;
+
+    /* timecode */
+    HEVCSEITimeCode timecode;
 
     int picture_struct;
 

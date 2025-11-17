@@ -33,6 +33,7 @@
 #include "libavutil/replaygain.h"
 #include "libavutil/spherical.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/timecode.h"
 
 #include "avformat.h"
 
@@ -370,6 +371,23 @@ static void dump_spherical(void *ctx, AVCodecParameters *par, AVPacketSideData *
     }
 }
 
+static void dump_s12m_timecode(void* ctx, AVRational avg_frame_rate, const AVPacketSideData* sd,
+    int log_level)
+{
+    const uint32_t* tc = (const uint32_t*)sd->data;
+
+    if ((sd->size != sizeof(uint32_t) * 4) || (tc[0] > 3)) {
+        av_log(ctx, AV_LOG_ERROR, "invalid data\n");
+        return;
+    }
+
+    for (int j = 1; j <= tc[0]; j++) {
+        char tcbuf[AV_TIMECODE_STR_SIZE];
+        av_timecode_make_smpte_tc_string2(tcbuf, avg_frame_rate, tc[j], 0, 0);
+        av_log(ctx, log_level, "timecode - %s%s", tcbuf, j != tc[0] ? ", " : "");
+    }
+}
+
 static void dump_sidedata(void *ctx, AVStream *st, const char *indent)
 {
     int i;
@@ -425,6 +443,10 @@ static void dump_sidedata(void *ctx, AVStream *st, const char *indent)
         case AV_PKT_DATA_SPHERICAL:
             av_log(ctx, AV_LOG_INFO, "spherical: ");
             dump_spherical(ctx, st->codecpar, &sd);
+            break;
+        case AV_PKT_DATA_S12M_TIMECODE:
+            av_log(ctx, AV_LOG_INFO, "SMPTE ST 12-1:2014: ");
+            dump_s12m_timecode(ctx, st->avg_frame_rate, &sd, AV_LOG_INFO);
             break;
         default:
             av_log(ctx, AV_LOG_INFO,

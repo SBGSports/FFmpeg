@@ -22,6 +22,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/timecode.h"
 #include "bytestream.h"
 #include "avcodec.h"
 #include "internal.h"
@@ -70,6 +71,8 @@ static int decode_frame(AVCodecContext *avctx,
                         int *got_frame,
                         AVPacket *avpkt)
 {
+    av_log(avctx, AV_LOG_INFO, "Decoding....\n");
+
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     AVFrame *const p = data;
@@ -165,6 +168,55 @@ static int decode_frame(AVCodecContext *avctx,
             if (q.num > 0 && q.den > 0)
                 avctx->framerate = q;
         }
+    }
+
+    /* alternative frame rate from television header */
+    if (offset >= 1940 + 4 &&
+        !(avctx->framerate.num && avctx->framerate.den)) {
+        buf = avpkt->data + 1940;
+        i = read32(&buf, endian);
+        if(i && i != 0xFFFFFFFF) {
+            AVRational q = av_d2q(av_int2float(i), 4096);
+            if (q.num > 0 && q.den > 0)
+                avctx->framerate = q;
+        }
+    }
+
+    /* SMPTE TC from television header */
+    if (offset >= 1920 + 4) {
+        uint32_t tc;
+        uint32_t *tc_sd;
+        char tcbuf[AV_TIMECODE_STR_SIZE];
+
+        buf = avpkt->data + 1920;
+        // read32 to native endian, av_bswap32 to opposite of native for
+        // compatibility with av_timecode_make_smpte_tc_string2 etc
+        tc = av_bswap32(read32(&buf, endian));
+
+        if (i != 0xFFFFFFFF) {
+            AVFrameSideData *tcside;
+            tcside = av_frame_new_side_data(p, AV_FRAME_DATA_S12M_TIMECODE,
+                                         sizeof(uint32_t) * 4);
+
+            if (tcside) {
+                tc_sd = (uint32_t*)tcside->data;
+                tc_sd[0] = 1;
+                tc_sd[1] = tc;
+
+                av_timecode_make_smpte_tc_string2(tcbuf, avctx->framerate,
+                                                  tc_sd[1], 0, 0);
+                av_dict_set(&p->metadata, "timecode", tcbuf, 0);
+                av_log(avctx, AV_LOG_INFO, "Added SMPTE Timecode\n");
+            }
+            else
+                av_log(avctx, AV_LOG_INFO, "SMPTE Timecode Failed 4\n");
+        }
+        else
+            av_log(avctx, AV_LOG_INFO, "SMPTE Timecode Failed 2\n");
+    }
+    else
+    {
+        av_log(avctx, AV_LOG_INFO, "SMPTE Timecode Failed 1\n");
     }
 
     switch (descriptor) {
