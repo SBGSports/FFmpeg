@@ -236,6 +236,8 @@ typedef struct HLSContext {
     HLSCryptoContext  crypto_ctx;
     /* rebase chunk-local fragment DTS/PTS to cumulative playlist time */
     int chunk_local_dts;
+    /* skip variants whose advertised peak BANDWIDTH exceeds this; 0 = no cap */
+    int64_t max_variant_bandwidth;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -991,7 +993,12 @@ static int parse_playlist(HLSContext *c, const char *url,
             continue;
         } else if (line[0]) {
             if (is_variant) {
-                if (!new_variant(c, &variant_info, line, url)) {
+                int64_t bw = atoll(variant_info.bandwidth);
+                if (c->max_variant_bandwidth > 0 && bw > c->max_variant_bandwidth) {
+                    av_log(c->ctx, AV_LOG_INFO,
+                           "Skipping variant %s (bandwidth %"PRId64" > max %"PRId64")\n",
+                           line, bw, c->max_variant_bandwidth);
+                } else if (!new_variant(c, &variant_info, line, url)) {
                     ret = AVERROR(ENOMEM);
                     goto fail;
                 }
@@ -2738,6 +2745,9 @@ static const AVOption hls_options[] = {
         "Treat fragment timestamps as chunk-local and inject cumulative segment "
         "time offset (Hudl-style stitched fmp4 VOD).",
         OFFSET(chunk_local_dts), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS},
+    {"max_variant_bandwidth",
+        "Skip variants in master playlist whose peak BANDWIDTH attribute exceeds this value (bps); 0 = no cap.",
+        OFFSET(max_variant_bandwidth), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, FLAGS},
     {NULL}
 };
 
