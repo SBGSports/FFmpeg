@@ -2253,6 +2253,17 @@ static int hls_read_header(AVFormatContext *s)
         pls->ctx->io_open  = nested_io_open;
         pls->ctx->flags   |= s->flags & ~AVFMT_FLAG_CUSTOM_IO;
 
+        /* For fmp4 VOD playlists (EXT-X-ENDLIST present), cap probing so
+         * mov_read_header doesn't iterate every top-level atom in the playlist
+         * (one HTTP fetch per moof — minutes of latency on stitched VOD with
+         * 1000+ fragments). Init's moov has full codec params, so a 1 MiB / 1 s
+         * probe window is plenty. */
+        if (pls->finished && pls->n_segments > 0 &&
+            in_fmt && in_fmt->name && !strcmp(in_fmt->name, "mov,mp4,m4a,3gp,3g2,mj2")) {
+            pls->ctx->probesize           = 1 * 1024 * 1024;
+            pls->ctx->max_analyze_duration = AV_TIME_BASE;
+        }
+
         if ((ret = ff_copy_whiteblacklists(pls->ctx, s)) < 0)
             return ret;
 
