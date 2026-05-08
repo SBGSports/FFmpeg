@@ -133,6 +133,8 @@ struct playlist {
     int m3u8_hold_counters;
     int64_t cur_seg_offset;
     int64_t last_load_time;
+    /* cumulative EXTINF time before cur_seq_no, AV_TIME_BASE units */
+    int64_t cur_segment_time_offset_us;
 
     /* Currently active Media Initialization Section */
     struct segment *cur_init_section;
@@ -232,6 +234,8 @@ typedef struct HLSContext {
     int seg_max_retry;
     AVIOContext *playlist_pb;
     HLSCryptoContext  crypto_ctx;
+    /* rebase chunk-local fragment DTS/PTS to cumulative playlist time */
+    int chunk_local_dts;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1536,6 +1540,8 @@ static int playlist_needed(struct playlist *pls)
     return 0;
 }
 
+static void update_segment_time_offset(struct playlist *pls);
+
 static int read_data(void *opaque, uint8_t *buf, int buf_size)
 {
     struct playlist *v = opaque;
@@ -1589,6 +1595,7 @@ reload:
                    "skipping %"PRId64" segments ahead, expired from playlists\n",
                    v->start_seq_no - v->cur_seq_no);
             v->cur_seq_no = v->start_seq_no;
+            update_segment_time_offset(v);
         }
         if (v->cur_seq_no > v->last_seq_no) {
             v->last_seq_no = v->cur_seq_no;
@@ -1640,6 +1647,7 @@ reload:
                        v->cur_seq_no,
                        v->index);
                 v->cur_seq_no++;
+                update_segment_time_offset(v);
                 segment_retries = 0;
             } else {
                 segment_retries++;
@@ -1700,6 +1708,7 @@ reload:
         ff_format_io_close(v->parent, &v->input);
     }
     v->cur_seq_no++;
+    update_segment_time_offset(v);
 
     c->cur_seq_no = v->cur_seq_no;
 
@@ -1790,6 +1799,32 @@ static int find_timestamp_in_playlist(HLSContext *c, struct playlist *pls,
     *seq_no = pls->start_seq_no + pls->n_segments - 1;
 
     return 0;
+}
+
+/* Per-chunk-local tfdt resets at each EXT-X-MAP, so rebase offset = playlist
+ * time at the chunk start (not at cur_seq_no). */
+static void update_segment_time_offset(struct playlist *pls)
+{
+    int64_t total = 0;
+    int64_t end = pls->cur_seq_no - pls->start_seq_no;
+    if (end > pls->n_segments)
+        end = pls->n_segments;
+    if (end < 0)
+        end = 0;
+    /* Chunk boundary = init_section pointer change (parser dedups identical
+     * EXT-X-MAP into one struct). */
+    int64_t chunk_start = end;
+    if (end < pls->n_segments && pls->segments[end] && pls->segments[end]->init_section) {
+        struct segment *cur_init = pls->segments[end]->init_section;
+        while (chunk_start > 0 && pls->segments[chunk_start - 1]
+               && pls->segments[chunk_start - 1]->init_section == cur_init)
+            chunk_start--;
+    }
+    for (int64_t i = 0; i < chunk_start; i++) {
+        if (pls->segments[i]->duration > 0)
+            total += pls->segments[i]->duration;
+    }
+    pls->cur_segment_time_offset_us = total;
 }
 
 static int64_t select_cur_seq_no(HLSContext *c, struct playlist *pls)
@@ -2081,6 +2116,7 @@ static int hls_read_header(AVFormatContext *s)
             continue;
 
         pls->cur_seq_no = select_cur_seq_no(c, pls);
+        update_segment_time_offset(pls);
         highest_cur_seq_no = FFMAX(highest_cur_seq_no, pls->cur_seq_no);
     }
 
@@ -2112,6 +2148,7 @@ static int hls_read_header(AVFormatContext *s)
         if (!pls->finished && pls->cur_seq_no == highest_cur_seq_no - 1 &&
             highest_cur_seq_no < pls->start_seq_no + pls->n_segments) {
             pls->cur_seq_no = highest_cur_seq_no;
+            update_segment_time_offset(pls);
         }
 
         pls->read_buffer = av_malloc(INITIAL_BUFFER_SIZE);
@@ -2297,6 +2334,7 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             pls->needed = 1;
             changed = 1;
             pls->cur_seq_no = select_cur_seq_no(c, pls);
+            update_segment_time_offset(pls);
             pls->pb.pub.eof_reached = 0;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
@@ -2383,6 +2421,16 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                         return ret;
                     break;
                 } else {
+                    /* rebase chunk-local fragment DTS/PTS to playlist time */
+                    if (c->chunk_local_dts && pls->cur_segment_time_offset_us > 0) {
+                        AVRational tb = get_timebase(pls);
+                        int64_t off = av_rescale_q(pls->cur_segment_time_offset_us,
+                                                   AV_TIME_BASE_Q, tb);
+                        if (pls->pkt->dts != AV_NOPTS_VALUE)
+                            pls->pkt->dts += off;
+                        if (pls->pkt->pts != AV_NOPTS_VALUE)
+                            pls->pkt->pts += off;
+                    }
                     /* stream_index check prevents matching picture attachments etc. */
                     if (pls->is_id3_timestamped && pls->pkt->stream_index == 0) {
                         /* audio elementary streams are id3 timestamped */
@@ -2556,6 +2604,7 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
 
     /* set segment now so we do not need to search again below */
     seek_pls->cur_seq_no = seq_no;
+    update_segment_time_offset(seek_pls);
     seek_pls->seek_stream_index = stream_subdemuxer_index;
 
     for (i = 0; i < c->n_playlists; i++) {
@@ -2584,6 +2633,7 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
         if (pls != seek_pls) {
             /* set closest segment seq_no for playlists not handled above */
             find_timestamp_in_playlist(c, pls, seek_timestamp, &pls->cur_seq_no, NULL);
+            update_segment_time_offset(pls);
             /* seek the playlist to the given position without taking
              * keyframes into account since this playlist does not have the
              * specified stream where we should look for the keyframes */
@@ -2673,6 +2723,10 @@ static const AVOption hls_options[] = {
         OFFSET(seg_format_opts), AV_OPT_TYPE_DICT, {.str = NULL}, 0, 0, FLAGS},
     {"seg_max_retry", "Maximum number of times to reload a segment on error.",
      OFFSET(seg_max_retry), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, FLAGS},
+    {"chunk_local_dts",
+        "Treat fragment timestamps as chunk-local and inject cumulative segment "
+        "time offset (Hudl-style stitched fmp4 VOD).",
+        OFFSET(chunk_local_dts), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS},
     {NULL}
 };
 
