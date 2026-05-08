@@ -2642,8 +2642,19 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
         /* Flush the packet queue of the subdemuxer. */
         ff_read_frame_flush(pls->ctx);
 
-        /* Reset the init segment so it's re-fetched and served appropiately */
-        pls->cur_init_section = NULL;
+        /* Reset the init segment so it's re-fetched only when the target
+         * segment uses a different init than the current one (typically
+         * across an EXT-X-DISCONTINUITY). For same-chunk seeks we keep the
+         * already-loaded init to avoid the per-seek re-fetch / mov
+         * frag_index rebuild cost. */
+        {
+            int64_t target_seq = pls->cur_seq_no - pls->start_seq_no;
+            struct segment *target_seg =
+                (target_seq >= 0 && target_seq < pls->n_segments)
+                    ? pls->segments[target_seq] : NULL;
+            if (!target_seg || target_seg->init_section != pls->cur_init_section)
+                pls->cur_init_section = NULL;
+        }
 
         pls->seek_timestamp = seek_timestamp;
         pls->seek_flags = flags;
