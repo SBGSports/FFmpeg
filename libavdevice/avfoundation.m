@@ -880,12 +880,21 @@ static int avf_read_header(AVFormatContext *s)
     if (ret)
         goto fail;
 
-    // check for device index given in filename
+    // check for device index given in filename; only a fully numeric name is
+    // an index, so uniqueIDs that start with digits fall through to name match
     if (ctx->video_device_index == -1 && ctx->video_filename) {
-        sscanf(ctx->video_filename, "%d", &ctx->video_device_index);
+        char *end;
+        long index = strtol(ctx->video_filename, &end, 10);
+        if (end != ctx->video_filename && *end == '\0' &&
+            index >= 0 && index <= INT_MAX)
+            ctx->video_device_index = (int)index;
     }
     if (ctx->audio_device_index == -1 && ctx->audio_filename) {
-        sscanf(ctx->audio_filename, "%d", &ctx->audio_device_index);
+        char *end;
+        long index = strtol(ctx->audio_filename, &end, 10);
+        if (end != ctx->audio_filename && *end == '\0' &&
+            index >= 0 && index <= INT_MAX)
+            ctx->audio_device_index = (int)index;
     }
 
     if (ctx->video_device_index >= 0) {
@@ -934,14 +943,16 @@ static int avf_read_header(AVFormatContext *s)
         } else {
         // looking for video inputs
         for (AVCaptureDevice *device in devices) {
-            if (!strncmp(ctx->video_filename, [[device localizedName] UTF8String], strlen(ctx->video_filename))) {
+            if (!strncmp(ctx->video_filename, [[device localizedName] UTF8String], strlen(ctx->video_filename)) ||
+                !strcmp(ctx->video_filename, [[device uniqueID] UTF8String])) {
                 video_device = device;
                 break;
             }
         }
         // looking for muxed inputs
         for (AVCaptureDevice *device in devices_muxed) {
-            if (!strncmp(ctx->video_filename, [[device localizedName] UTF8String], strlen(ctx->video_filename))) {
+            if (!strncmp(ctx->video_filename, [[device localizedName] UTF8String], strlen(ctx->video_filename)) ||
+                !strcmp(ctx->video_filename, [[device uniqueID] UTF8String])) {
                 video_device = device;
                 ctx->video_is_muxed = 1;
                 break;
@@ -1006,7 +1017,8 @@ static int avf_read_header(AVFormatContext *s)
         NSArray *devices = getDevicesWithMediaType(AVMediaTypeAudio);
 
         for (AVCaptureDevice *device in devices) {
-            if (!strncmp(ctx->audio_filename, [[device localizedName] UTF8String], strlen(ctx->audio_filename))) {
+            if (!strncmp(ctx->audio_filename, [[device localizedName] UTF8String], strlen(ctx->audio_filename)) ||
+                !strcmp(ctx->audio_filename, [[device uniqueID] UTF8String])) {
                 audio_device = device;
                 break;
             }
