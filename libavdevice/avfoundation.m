@@ -1274,6 +1274,67 @@ static int avf_close(AVFormatContext *s)
     return 0;
 }
 
+static int avf_add_device_info(AVDeviceInfoList *list, AVCaptureDevice *device,
+                               enum AVMediaType type)
+{
+    int ret;
+    AVDeviceInfo *info = av_mallocz(sizeof(AVDeviceInfo));
+    if (!info)
+        return AVERROR(ENOMEM);
+
+    info->device_name        = av_strdup([[device uniqueID] UTF8String]);
+    info->device_description = av_strdup([[device localizedName] UTF8String]);
+    info->media_types        = av_malloc(sizeof(enum AVMediaType));
+    if (!info->device_name || !info->device_description || !info->media_types) {
+        av_freep(&info->device_name);
+        av_freep(&info->device_description);
+        av_freep(&info->media_types);
+        av_free(info);
+        return AVERROR(ENOMEM);
+    }
+    info->media_types[0] = type;
+    info->nb_media_types = 1;
+
+    ret = av_dynarray_add_nofree(&list->devices, &list->nb_devices, info);
+    if (ret < 0) {
+        av_freep(&info->device_name);
+        av_freep(&info->device_description);
+        av_freep(&info->media_types);
+        av_free(info);
+    }
+    return ret;
+}
+
+static int avf_get_device_list(AVFormatContext *s, AVDeviceInfoList *list)
+{
+    int ret = 0;
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
+    @try {
+        NSArray *video_devices = getDevicesWithMediaType(AVMediaTypeVideo);
+        NSArray *muxed_devices = getDevicesWithMediaType(AVMediaTypeMuxed);
+        NSArray *audio_devices = getDevicesWithMediaType(AVMediaTypeAudio);
+
+        for (AVCaptureDevice *device in video_devices)
+            if (ret >= 0)
+                ret = avf_add_device_info(list, device, AVMEDIA_TYPE_VIDEO);
+        for (AVCaptureDevice *device in muxed_devices)
+            if (ret >= 0)
+                ret = avf_add_device_info(list, device, AVMEDIA_TYPE_VIDEO);
+        for (AVCaptureDevice *device in audio_devices)
+            if (ret >= 0)
+                ret = avf_add_device_info(list, device, AVMEDIA_TYPE_AUDIO);
+    } @catch (NSException *exception) {
+        av_log(s, AV_LOG_ERROR, "avf_get_device_list exception: %s\n",
+               [[exception description] UTF8String]);
+        ret = AVERROR_EXTERNAL;
+    }
+
+    list->default_device = list->nb_devices > 0 ? 0 : -1;
+    [pool release];
+    return ret < 0 ? ret : 0;
+}
+
 static const AVOption options[] = {
     { "list_devices", "list available devices", offsetof(AVFContext, list_devices), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
     { "video_device_index", "select video device by index for devices with same name (starts at 0)", offsetof(AVFContext, video_device_index), AV_OPT_TYPE_INT, {.i64 = -1}, -1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
@@ -1306,4 +1367,5 @@ const FFInputFormat ff_avfoundation_demuxer = {
     .read_header    = avf_read_header,
     .read_packet    = avf_read_packet,
     .read_close     = avf_close,
+    .get_device_list = avf_get_device_list,
 };
