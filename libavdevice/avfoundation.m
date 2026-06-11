@@ -315,17 +315,23 @@ static void destroy_context(AVFContext* ctx)
 static int parse_device_name(AVFormatContext *s)
 {
     AVFContext *ctx = (AVFContext*)s->priv_data;
-    char *save;
 
     ctx->url = av_strdup(s->url);
 
     if (!ctx->url)
         return AVERROR(ENOMEM);
     if (ctx->url[0] != ':') {
-        ctx->video_filename = av_strtok(ctx->url,  ":", &save);
-        ctx->audio_filename = av_strtok(NULL, ":", &save);
-    } else {
-        ctx->audio_filename = av_strtok(ctx->url,  ":", &save);
+        // audio is everything after the first ':' so CoreAudio uniqueIDs
+        // containing ':' (AppleUSBAudioEngine:...) survive intact
+        char *sep = strchr(ctx->url, ':');
+        ctx->video_filename = ctx->url;
+        if (sep) {
+            *sep = '\0';
+            if (sep[1])
+                ctx->audio_filename = sep + 1;
+        }
+    } else if (ctx->url[1]) {
+        ctx->audio_filename = ctx->url + 1;
     }
     return 0;
 }
